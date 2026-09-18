@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NMOS Cascode 电流镜精度计算器</title>
+  <style>
+    :root { color-scheme: dark; --bg:#10151f; --panel:#182130; --line:#2b3b52; --text:#e9f0fb; --muted:#9db0c9; --accent:#73d2ff; --good:#6de0a2; --bad:#ff8f99; }
+    * { box-sizing: border-box; } body { margin:0; font:15px/1.45 system-ui,"Microsoft YaHei",sans-serif; background:linear-gradient(135deg,#0e1420,#151c2a); color:var(--text); }
+    main { width:min(1120px,calc(100% - 32px)); margin:32px auto 56px; } h1 { margin:0 0 6px; font-size:28px; } h2 { font-size:16px; margin:0 0 14px; } .lede,.note { color:var(--muted); } .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin-top:24px; } .card { background:rgba(24,33,48,.94); border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:0 10px 24px #0002; }
+    .form { display:grid; grid-template-columns:1fr 1fr; gap:11px 14px; } label { display:grid; gap:5px; color:var(--muted); font-size:13px; } input { width:100%; border:1px solid #3b4e69; border-radius:7px; background:#0e1622; padding:9px; color:var(--text); font:inherit; } button { margin-top:18px; background:var(--accent); color:#061521; border:0; border-radius:8px; padding:10px 17px; font-weight:700; cursor:pointer; } .results { display:grid; gap:10px; } .metric { display:flex; justify-content:space-between; gap:12px; border-bottom:1px solid var(--line); padding:9px 0; } .metric span { color:var(--muted); } .metric strong { font-variant-numeric:tabular-nums; text-align:right; } .good { color:var(--good); }.bad { color:var(--bad); } code { color:#b9e9ff; } .wide { grid-column:1/-1; } details { margin-top:18px; color:var(--muted); } summary { color:var(--text); cursor:pointer; } .schematic { display:block; width:auto; height:auto; max-width:100%; max-height:370px; object-fit:contain; } .formula { display:grid; gap:12px; color:var(--muted); } .formula div { padding:12px; border-left:3px solid var(--accent); background:#101926; border-radius:0 7px 7px 0; } .formula code { display:block; margin-top:5px; overflow-x:auto; white-space:nowrap; } @media(max-width:720px){.grid{grid-template-columns:1fr}.form{grid-template-columns:1fr}.wide{grid-column:auto}}
+  </style>
+</head>
+<body>
+<main>
+  <h1>NMOS Cascode 电流镜精度计算器</h1>
+  <p class="lede">基于 Pelgrom 随机失配模型，估算 NMOS cascode 电流镜的 1σ / 3σ 电流匹配误差。</p>
+  <div class="grid">
+    <section class="card wide">
+      <h2>电路图</h2>
+      <img class="schematic" src="assets/nmos-cascode-current-mirror.png" alt="NMOS cascode 电流镜电路图：M1、M3 为参考支路，M2、M4 为输出支路，电流比例为 1:k。">
+      <p class="note">图中左侧支路由 I<sub>in</sub> 建立偏置；右侧输出支路产生 I<sub>out</sub>。下方器件尺寸比例为 1:k，界面中的输出支路 W/L 可用来设置该比例。</p>
+    </section>
+    <section class="card">
+      <h2>设计目标</h2><div class="form"><label>参考电流 I<sub>REF</sub> (µA)<input id="iref" type="number" value="100" min="0.001" step="any"></label><label>设计温度 (°C，仅记录)<input id="temp" type="number" value="27" step="any"></label></div>
+      <h2 style="margin-top:22px">参考支路设定电流管 M1</h2><div class="form"><label>k′<sub>n</sub> (µA/V²)<input id="knRef" type="number" value="200" min="0.001" step="any"></label><label>W<sub>M1</sub> (µm)<input id="wRef" type="number" value="10" min="0.001" step="any"></label><label>L<sub>M1</sub> (µm)<input id="lRef" type="number" value="1" min="0.001" step="any"></label></div>
+      <h2 style="margin-top:22px">输出支路镜像管 M2</h2><div class="form"><label>k′<sub>n</sub> (µA/V²)<input id="knOut" type="number" value="200" min="0.001" step="any"></label><label>W<sub>M2</sub> (µm)<input id="wOut" type="number" value="10" min="0.001" step="any"></label><label>L<sub>M2</sub> (µm)<input id="lOut" type="number" value="1" min="0.001" step="any"></label></div>
+      <h2 style="margin-top:22px">工艺随机失配系数</h2><div class="form"><label>A<sub>Vt</sub> (mV·µm)<input id="avt" type="number" value="3" min="0" step="any"></label><label>A<sub>β</sub> (%·µm)<input id="abeta" type="number" value="1" min="0" step="any"></label></div><button id="calc">计算随机匹配误差</button>
+    </section>
+    <section class="card"><h2>计算结果</h2><div id="results" class="results" aria-live="polite"></div><details><summary>模型与适用范围</summary><p>结果是独立、正态的局部随机失配估计，主要针对设定镜像比的 M1/M2。M3/M4 的失配通常主要改变内部节点电压；它们通过有限输出电阻、体效应和接近饱和边界造成的二阶影响未计入。要得到完整 cascode 的 PVT + Monte Carlo 结果，应使用工艺 PDK 的 BSIM 模型仿真。</p></details></section>
+    <section class="card wide"><h2>计算原理与公式</h2><div class="formula"><div><strong>1. Pelgrom 阈值失配</strong><code>σ(ΔVTH) = AVt·√[1/(WM1LM1) + 1/(WM2LM2)]</code>。输入的 <code>AVt</code> 单位为 mV·µm，W、L 使用 µm。</div><div><strong>2. 电流因子失配</strong><code>σ(Δβ/β) = Aβ·√[1/(WM1LM1) + 1/(WM2LM2)]</code>。输入的 <code>Aβ</code> 单位为 %·µm。</div><div><strong>3. 阈值电压转成电流误差</strong><code>VOV = √[2·IREF / (k′n·WM1/LM1)]；σVT贡献 = 2·σ(ΔVTH)/VOV</code>。低过驱动电压会显著放大 VTH 的随机偏差。</div><div><strong>4. 合成随机匹配误差</strong><code>σ(ΔI/I) = √[(2σ(ΔVTH)/VOV)² + σ(Δβ/β)²]</code>。页面报告 1σ、3σ 和 6σ；3σ 对应约 99.73% 的正态分布范围，6σ 用于更保守的设计裕量评估。</div></div></section>
+    <section class="card wide note">提示：请使用对应工艺、温度和器件类型的 PDK 统计参数 A<sub>Vt</sub> 与 A<sub>β</sub>。本页的结果是 M1 与 M2 的局部随机失配；扩大两管有效面积能降低随机误差，但不能消除输出电压、有限输出电阻或版图梯度带来的系统误差。</section>
+  </div>
+</main>
+<script>
+const $=id=>document.getElementById(id),val=id=>Number($(id).value),f=(x,n=4)=>Number.isFinite(x)?x.toFixed(n):'—';
+function calc(){const I=val('iref'),knr=val('knRef'),kno=val('knOut'),wr=val('wRef'),lr=val('lRef'),wo=val('wOut'),lo=val('lOut'),avt=val('avt'),abeta=val('abeta'),R=$('results');if([I,knr,kno,wr,lr,wo,lo,avt,abeta].some(x=>!Number.isFinite(x))||I<=0||knr<=0||kno<=0||wr<=0||lr<=0||wo<=0||lo<=0||avt<0||abeta<0){R.innerHTML='<p class="bad">请输入有效的器件尺寸、工艺系数与正数电流。</p>';return}const areaRef=wr*lr,areaOut=wo*lo,betaRef=knr*wr/lr,betaOut=kno*wo/lo,vov=Math.sqrt(2*I/betaRef),ratio=betaOut/betaRef,io=I*ratio,areaFactor=Math.sqrt(1/areaRef+1/areaOut),sigmaVt=avt/1000*areaFactor,sigmaBeta=abeta/100*areaFactor,sigmaVtCurrent=2*sigmaVt/vov,sigmaTotal=Math.sqrt(sigmaVtCurrent**2+sigmaBeta**2),oneSigma=io*sigmaTotal,threeSigma=3*oneSigma;R.innerHTML=`<div class="metric"><span>名义输出电流 IOUT</span><strong>${f(io,3)} µA</strong></div><div class="metric"><span>名义电流比 IOUT/IREF</span><strong>${f(ratio,4)} : 1</strong></div><div class="metric"><span>参考管过驱动 VOV</span><strong>${f(vov,4)} V</strong></div><div class="metric"><span>σ(ΔVTH, M1−M2)</span><strong>${f(sigmaVt*1000,4)} mV</strong></div><div class="metric"><span>σ(Δβ/β, M1−M2)</span><strong>${f(sigmaBeta*100,4)} %</strong></div><div class="metric"><span>随机电流失配 1σ</span><strong class="good">±${f(sigmaTotal*100,4)} %　(±${f(oneSigma,4)} µA)</strong></div><div class="metric"><span>随机电流失配 3σ</span><strong class="${sigmaTotal*3<0.01?'good':'bad'}">±${f(sigmaTotal*300,4)} %　(±${f(threeSigma,4)} µA)</strong></div><div class="metric"><span>3σ IOUT 预测范围</span><strong>${f(io-threeSigma,4)} ~ ${f(io+threeSigma,4)} µA</strong></div><div class="metric"><span>随机电流失配 6σ</span><strong class="${sigmaTotal*6<0.01?'good':'bad'}">±${f(sigmaTotal*600,4)} %　(±${f(2*threeSigma,4)} µA)</strong></div><div class="metric"><span>6σ IOUT 预测范围</span><strong>${f(io-2*threeSigma,4)} ~ ${f(io+2*threeSigma,4)} µA</strong></div>`;}
+$('calc').addEventListener('click',calc);document.querySelectorAll('input').forEach(x=>x.addEventListener('change',calc));calc();
+</script></body></html>
